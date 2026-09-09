@@ -11,6 +11,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel.Connectors.Qdrant;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile(
+    path: ".env/LLMSettings.json",
+    optional: false,
+    reloadOnChange: true);
+
 var qdrantHost = builder.Configuration["Qdrant:Host"]?.Trim();
 if (string.IsNullOrWhiteSpace(qdrantHost))
 {

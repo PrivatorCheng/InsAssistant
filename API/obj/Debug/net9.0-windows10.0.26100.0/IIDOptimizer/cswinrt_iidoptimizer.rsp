@@ -1,7 +1,7 @@
 --target
-C:\Kevin\Source Code\TestSales\API\obj\Debug\net9.0-windows10.0.26100.0\API.dll
+C:\Kevin\Source Code\InsAssistant\API\obj\Debug\net9.0-windows10.0.26100.0\API.dll
 --outdir
-C:\Kevin\Source Code\TestSales\API\obj\Debug\net9.0-windows10.0.26100.0\IIDOptimizer\
+C:\Kevin\Source Code\InsAssistant\API\obj\Debug\net9.0-windows10.0.26100.0\IIDOptimizer\
 --refs 
  C:\Program Files\dotnet\packs\Microsoft.WindowsDesktop.App.Ref\9.0.18\ref\net9.0\Accessibility.dll
 --refs 
