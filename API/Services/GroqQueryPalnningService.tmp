@@ -1,0 +1,444 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using API.Contracts;
+using API.Infrastructure;
+using API.Models;
+
+namespace API.Services;
+
+/// <summary>
+/// Groq LLM 設定。
+/// </summary>
+public sealed class GroqSettings
+{
+    public required string ApiKey { get; set; }
+
+    public required string Model { get; set; }
+}
+
+internal sealed class GroqChatResponse
+{
+    [JsonPropertyName("choices")]
+    public List<GroqChoice>? Choices { get; set; }
+
+    [JsonPropertyName("error")]
+    public GroqError? Error { get; set; }
+}
+
+internal sealed class GroqChoice
+{
+    [JsonPropertyName("message")]
+    public GroqMessage? Message { get; set; }
+}
+
+internal sealed class GroqMessage
+{
+    [JsonPropertyName("content")]
+    public string? Content { get; set; }
+}
+
+internal sealed class GroqError
+{
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+}
+
+/// <summary>
+/// 使用 Groq 生成 QuerySpec 的服務。
+/// </summary>
+public sealed class GroqQueryPalnningService : IQueryPlanningService
+{
+    private readonly GroqSettings _settings;
+    private readonly IWhitelistLayoutService _whitelistLayoutService;
+    private readonly CustomLogger _logger;
+    private readonly HttpClient _httpClient;
+
+    public GroqQueryPalnningService(
+        GroqSettings settings,
+        IWhitelistLayoutService whitelistLayoutService,
+        ILogger<GroqQueryPalnningService> logger)
+    {
+        _settings = settings;
+        _whitelistLayoutService = whitelistLayoutService;
+        _logger = logger.ToCustomLogger();
+        _httpClient = new HttpClient();
+    }
+
+    public async Task<QuerySpec> PlanAsync(
+        PreprocessResult preprocessResult,
+        List<string> selectedLayouts,
+        CancellationToken cancellationToken = default)
+    {
+        var availableTables = selectedLayouts
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(x => !string.IsNullOrWhiteSpace(x) && !x.Equals("table_list", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var tableFieldMap = availableTables.ToDictionary(
+            table => table,
+            table => _whitelistLayoutService.GetFields(table),
+            StringComparer.OrdinalIgnoreCase);
+        var tableFieldText = BuildTableFieldText(tableFieldMap);
+
+        var systemPrompt = $@"你是一個企業報表查詢規劃器。根據使用者問題、可用的資料表與欄位，生成結構化的 QuerySpec JSON。
+
+可用資料表：{string.Join(", ", availableTables)}
+資料表欄位：{tableFieldText}
+
+關鍵規則：
+1. 只允許使用上列可用表格
+2. 只生成 Dimensions、Metrics、Filters 中的欄位都在白名單內的查詢
+3. 必須輸出有效的 JSON，符合下列 QuerySpec 結構
+4. 不可回傳空查詢：TargetTables 與 Metrics 至少要各有 1 個
+5. 若問題包含「件數/數量」，請使用 COUNT(iclaim)
+6. 若問題包含「金額/加總/總金額」，請優先使用 SUM(mstl)；若無 mstl 才改用其他金額欄位
+7. 若有日期範圍，請在可用日期欄位上加 BETWEEN 過濾
+8. 只回傳 JSON，不要加 markdown code block。
+
+QuerySpec JSON 結構：
+{{
+  ""targetTables"": [""table_name""],
+  ""joins"": [],
+  ""dimensions"": [
+    {{
+      ""table"": ""table_name"",
+      ""field"": ""field_name"",
+      ""alias"": ""aliasName""
+    }}
+  ],
+  ""metrics"": [
+    {{
+      ""table"": ""table_name"",
+      ""field"": ""field_name"",
+      ""aggregation"": ""COUNT|SUM|AVG|MAX|MIN"",
+      ""alias"": ""aliasName""
+    }}
+  ],
+  ""filters"": [
+    {{
+      ""table"": ""table_name"",
+      ""field"": ""field_name"",
+      ""operator"": ""EQUALS|BETWEEN|LIKE|GREATER_THAN|LESS_THAN"",
+      ""value"": [""value1"", ""value2""]
+    }}
+  ],
+  ""sort"": [
+    {{
+      ""table"": ""table_name"",
+      ""field"": ""field_name"",
+      ""direction"": ""ASC|DESC""
+    }}
+  ],
+  ""limit"": 200
+}}";
+
+        var userPrompt = $@"使用者正規化問題：{preprocessResult.NormalizedQuestion}
+起始日期：{preprocessResult.StartDate:yyyy-MM-dd}
+結束日期：{preprocessResult.EndDate:yyyy-MM-dd}
+
+請根據問題與可用表格生成 QuerySpec JSON。";
+
+        try
+        {
+            var requestPayload = new
+            {
+                model = _settings.Model,
+                temperature = 0,
+                response_format = new { type = "json_object" },
+                messages = new object[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userPrompt }
+                }
+            };
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(requestPayload),
+                    System.Text.Encoding.UTF8,
+                    "application/json")
+            };
+
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _settings.ApiKey);
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var groqError = TryReadGroqErrorMessage(responseText);
+                _logger.Info("groq api failed. status: {}, response: {}", (int)response.StatusCode, responseText);
+                throw new InvalidOperationException($"Groq API 失敗：{response.StatusCode}。{groqError ?? "請檢查 API Key、模型名稱與權限"}");
+            }
+
+            var groqResponse = JsonSerializer.Deserialize<GroqChatResponse>(responseText);
+            if (groqResponse?.Error is not null)
+            {
+                throw new InvalidOperationException($"Groq 錯誤：{groqResponse.Error.Message}");
+            }
+
+            var textContent = groqResponse?.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrWhiteSpace(textContent))
+            {
+                throw new InvalidOperationException("Groq 回傳空內容");
+            }
+
+            var jsonMatch = System.Text.RegularExpressions.Regex.Match(
+                textContent,
+                @"\{[\s\S]*\}",
+                System.Text.RegularExpressions.RegexOptions.RightToLeft);
+
+            if (!jsonMatch.Success)
+            {
+                throw new InvalidOperationException($"無法從 Groq 回應中提取 JSON：{textContent}");
+            }
+
+            var querySpec = JsonSerializer.Deserialize<QuerySpec>(
+                jsonMatch.Value,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (querySpec is null)
+            {
+                throw new InvalidOperationException("Groq JSON 反序列化失敗");
+            }
+
+            querySpec = NormalizeQuerySpec(querySpec, preprocessResult, availableTables, tableFieldMap);
+            if (IsEffectivelyEmpty(querySpec))
+            {
+                querySpec = BuildHeuristicSpec(preprocessResult, availableTables, tableFieldMap);
+            }
+
+            ValidateQuerySpec(querySpec);
+            return querySpec;
+        }
+        catch (Exception exception) when (exception is not StepExecutionException)
+        {
+            _logger.Error(exception, "groq query planning failed. question: {}", preprocessResult.NormalizedQuestion);
+            throw new StepExecutionException(
+                3,
+                "LLM QuerySpec 生成",
+                exception.Message,
+                null,
+                exception);
+        }
+    }
+
+    private static string? TryReadGroqErrorMessage(string responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return null;
+        }
+
+        try
+        {
+            var response = JsonSerializer.Deserialize<GroqChatResponse>(responseText);
+            return response?.Error?.Message;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string BuildTableFieldText(Dictionary<string, IReadOnlyCollection<string>> tableFieldMap)
+    {
+        return string.Join("; ", tableFieldMap.Select(pair =>
+        {
+            var fields = pair.Value.Take(30);
+            return $"{pair.Key}:[{string.Join(",", fields)}]";
+        }));
+    }
+
+    private static bool IsEffectivelyEmpty(QuerySpec spec)
+    {
+        return spec.TargetTables.Count == 0 || spec.Metrics.Count == 0;
+    }
+
+    private QuerySpec NormalizeQuerySpec(
+        QuerySpec spec,
+        PreprocessResult preprocessResult,
+        List<string> availableTables,
+        Dictionary<string, IReadOnlyCollection<string>> tableFieldMap)
+    {
+        spec.TargetTables ??= new List<string>();
+        spec.Joins ??= new List<JoinDetail>();
+        spec.Dimensions ??= new List<DimensionDetail>();
+        spec.Metrics ??= new List<MetricDetail>();
+        spec.Filters ??= new List<FilterDetail>();
+        spec.Sort ??= new List<SortDetail>();
+        spec.Limit ??= 200;
+
+        if (spec.TargetTables.Count == 0)
+        {
+            var fallback = BuildHeuristicSpec(preprocessResult, availableTables, tableFieldMap);
+            spec.TargetTables = fallback.TargetTables;
+            if (spec.Metrics.Count == 0)
+            {
+                spec.Metrics = fallback.Metrics;
+            }
+            if (spec.Filters.Count == 0)
+            {
+                spec.Filters = fallback.Filters;
+            }
+        }
+
+        if (spec.Metrics.Count == 0)
+        {
+            var table = spec.TargetTables[0];
+            var fields = tableFieldMap.TryGetValue(table, out var targetFields)
+                ? targetFields
+                : _whitelistLayoutService.GetFields(table);
+            var countField = fields.Contains("iclaim", StringComparer.OrdinalIgnoreCase)
+                ? "iclaim"
+                : fields.FirstOrDefault() ?? "iclaim";
+            spec.Metrics.Add(new MetricDetail
+            {
+                Table = table,
+                Field = countField,
+                Aggregation = "COUNT",
+                Alias = "claimCount"
+            });
+        }
+
+        return spec;
+    }
+
+    private QuerySpec BuildHeuristicSpec(
+        PreprocessResult preprocessResult,
+        List<string> availableTables,
+        Dictionary<string, IReadOnlyCollection<string>> tableFieldMap)
+    {
+        var question = preprocessResult.NormalizedQuestion;
+
+        var targetTable = availableTables.FirstOrDefault(x =>
+            x.Equals("clam_stl_instype", StringComparison.OrdinalIgnoreCase) ||
+            x.Equals("clam_stl_main", StringComparison.OrdinalIgnoreCase) ||
+            x.Equals("clam_clm_main", StringComparison.OrdinalIgnoreCase))
+            ?? availableTables.FirstOrDefault()
+            ?? "clam_stl_instype";
+
+        var fields = tableFieldMap.TryGetValue(targetTable, out var targetFields)
+            ? targetFields
+            : _whitelistLayoutService.GetFields(targetTable);
+
+        var metrics = new List<MetricDetail>();
+
+        if (question.Contains("件數", StringComparison.OrdinalIgnoreCase) ||
+            question.Contains("數量", StringComparison.OrdinalIgnoreCase) ||
+            question.Contains("筆數", StringComparison.OrdinalIgnoreCase))
+        {
+            var countField = fields.Contains("iclaim", StringComparer.OrdinalIgnoreCase)
+                ? "iclaim"
+                : fields.FirstOrDefault() ?? "iclaim";
+            metrics.Add(new MetricDetail
+            {
+                Table = targetTable,
+                Field = countField,
+                Aggregation = "COUNT",
+                Alias = "claimCount"
+            });
+        }
+
+        if (question.Contains("金額", StringComparison.OrdinalIgnoreCase) ||
+            question.Contains("總金額", StringComparison.OrdinalIgnoreCase) ||
+            question.Contains("加總", StringComparison.OrdinalIgnoreCase) ||
+            question.Contains("總額", StringComparison.OrdinalIgnoreCase))
+        {
+            var amountCandidates = new[] { "mstl", "mapp", "mapp_total1", "mfee" };
+            var amountField = amountCandidates.FirstOrDefault(candidate => fields.Contains(candidate, StringComparer.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(amountField))
+            {
+                metrics.Add(new MetricDetail
+                {
+                    Table = targetTable,
+                    Field = amountField,
+                    Aggregation = "SUM",
+                    Alias = "totalAmount"
+                });
+            }
+        }
+
+        if (metrics.Count == 0)
+        {
+            var fallbackField = fields.Contains("iclaim", StringComparer.OrdinalIgnoreCase)
+                ? "iclaim"
+                : fields.FirstOrDefault() ?? "iclaim";
+            metrics.Add(new MetricDetail
+            {
+                Table = targetTable,
+                Field = fallbackField,
+                Aggregation = "COUNT",
+                Alias = "claimCount"
+            });
+        }
+
+        var filters = new List<FilterDetail>();
+        if (preprocessResult.StartDate.HasValue && preprocessResult.EndDate.HasValue)
+        {
+            var dateCandidates = new[] { "dcreate", "dapply", "tcreate", "tupdate", "dest" };
+            var dateField = dateCandidates.FirstOrDefault(candidate => fields.Contains(candidate, StringComparer.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(dateField))
+            {
+                filters.Add(new FilterDetail
+                {
+                    Table = targetTable,
+                    Field = dateField,
+                    Operator = "BETWEEN",
+                    Value =
+                    [
+                        preprocessResult.StartDate.Value.ToString("yyyy-MM-dd"),
+                        preprocessResult.EndDate.Value.ToString("yyyy-MM-dd")
+                    ]
+                });
+            }
+        }
+
+        return new QuerySpec
+        {
+            TargetTables = [targetTable],
+            Joins = new List<JoinDetail>(),
+            Dimensions = new List<DimensionDetail>(),
+            Metrics = metrics,
+            Filters = filters,
+            Sort = new List<SortDetail>(),
+            Limit = 200
+        };
+    }
+
+    private void ValidateQuerySpec(QuerySpec spec)
+    {
+        foreach (var table in spec.TargetTables)
+        {
+            if (!_whitelistLayoutService.IsValidTable(table))
+            {
+                throw new InvalidOperationException($"資料表 {table} 不在白名單內");
+            }
+        }
+
+        foreach (var dimension in spec.Dimensions)
+        {
+            if (!_whitelistLayoutService.IsValidField(dimension.Table, dimension.Field))
+            {
+                throw new InvalidOperationException($"無效維度欄位：{dimension.Table}.{dimension.Field}");
+            }
+        }
+
+        foreach (var metric in spec.Metrics)
+        {
+            if (!_whitelistLayoutService.IsValidField(metric.Table, metric.Field))
+            {
+                throw new InvalidOperationException($"無效指標欄位：{metric.Table}.{metric.Field}");
+            }
+        }
+
+        foreach (var filter in spec.Filters)
+        {
+            if (!_whitelistLayoutService.IsValidField(filter.Table, filter.Field))
+            {
+                throw new InvalidOperationException($"無效過濾欄位：{filter.Table}.{filter.Field}");
+            }
+        }
+    }
+}

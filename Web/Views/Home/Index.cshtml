@@ -1,0 +1,286 @@
+﻿@model Web.Models.TextToSqlPageViewModel
+@{
+    ViewData["Title"] = "AI 產險行銷商品建議平台";
+}
+
+<div class="query-shell">
+    <input id="apiBaseUrl" type="hidden" value="@Model.ApiBaseUrl" />
+    <input id="showDebugPanel" type="hidden" value="@Model.ShowDebugPanel.ToString().ToLowerInvariant()" />
+    <input id="imageProcessFlag" type="hidden" value="@Model.ImageProcessFlag" />
+
+    <section class="gpt-shell mb-3">
+        <div id="conversationList" class="conversation-list" aria-live="polite"></div>
+
+        <div class="composer-panel mt-2">
+            <label class="form-label fw-semibold" for="queryInput">查詢句</label>
+            <div class="query-input-group">
+                <textarea id="queryInput" class="form-control" rows="1" aria-label="查詢內容" placeholder="提出任何問題"></textarea>
+                <input id="fileUploadInput" type="file" class="visually-hidden" aria-hidden="true" />
+                <input id="imageUploadInput" type="file" accept="image/*" class="visually-hidden" aria-hidden="true" />
+                <button id="imageUploadButton" class="btn btn-query query-image-upload-btn" type="button" aria-label="影像上傳" title="影像上傳">
+                    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M14.002 3A1.998 1.998 0 0 1 16 5v6a2 2 0 0 1-1.998 2H1.998A1.998 1.998 0 0 1 0 11V5a2 2 0 0 1 1.998-2zM1.5 5a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 0-.5-.5z"/>
+                        <path d="M10.648 7.646a.5.5 0 0 1 .707 0L13 9.293V10h-1.293l-1.853-1.854a.5.5 0 0 1 0-.707M3 9.5l1.5-2 2 2.5L8 8l3 3.5H3z"/>
+                        <path d="M4.5 7a1 1 0 1 0 0-2a1 1 0 0 0 0 2"/>
+                    </svg>
+                    <span class="visually-hidden">影像上傳</span>
+                </button>
+                <button id="fileUploadButton" class="btn btn-query query-upload-btn" type="button" aria-label="上傳檔案" title="上傳檔案">
+                    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M4.5 3.5A3.5 3.5 0 0 1 11 5v6a2.5 2.5 0 0 1-5 0V6.5a1.5 1.5 0 0 1 3 0v4a.75.75 0 0 1-1.5 0v-4a.5.5 0 0 0-1 0V11a1 1 0 0 0 2 0V5a2 2 0 0 0-4 0v6.5a3 3 0 0 0 6 0V6a.75.75 0 0 1 1.5 0v5.5a4.5 4.5 0 0 1-9 0z" />
+                    </svg>
+                    <span class="visually-hidden">上傳檔案</span>
+                </button>
+                <button id="voiceInputButton" class="btn btn-query query-voice-btn" type="button" aria-label="語音輸入" title="開始語音輸入">
+                    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M8 1.25a2.75 2.75 0 0 0-2.75 2.75v3.5a2.75 2.75 0 1 0 5.5 0V4A2.75 2.75 0 0 0 8 1.25M6.75 4a1.25 1.25 0 1 1 2.5 0v3.5a1.25 1.25 0 1 1-2.5 0z" />
+                        <path d="M3.25 7.25a.75.75 0 0 1 .75.75a4 4 0 0 0 8 0a.75.75 0 0 1 1.5 0a5.5 5.5 0 0 1-4.75 5.44V15a.75.75 0 0 1-1.5 0v-1.56A5.5 5.5 0 0 1 2.5 8a.75.75 0 0 1 .75-.75" />
+                    </svg>
+                    <span class="visually-hidden">語音輸入</span>
+                </button>
+                <button id="queryButton" class="btn btn-query query-submit-icon-btn" type="button" aria-label="執行查詢" title="執行查詢">
+                    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M8 1.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 0 0 0-13M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8" />
+                        <path d="M6.2 4.8a.75.75 0 0 1 1.06 0l2.67 2.67a.75.75 0 0 1 0 1.06L7.26 11.2a.75.75 0 0 1-1.06-1.06L8.34 8L6.2 5.86a.75.75 0 0 1 0-1.06" />
+                    </svg>
+                    <span class="visually-hidden">執行查詢</span>
+                </button>
+            </div>
+            <div class="llm-provider-options mt-2 text-end" id="llmProviderGroup" role="radiogroup" aria-label="LLM 提供者選項">
+                <span class="small text-secondary">載入中...</span>
+            </div>
+            <div class="model-display-row mt-1">
+                <div id="uploadedFileList" class="uploaded-file-list" aria-live="polite"></div>
+                <div class="model-display-actions text-end">
+                    <div class="d-inline-flex align-items-center gap-2 me-2" role="radiogroup" aria-label="對話模式">
+                        <label class="form-check d-inline-flex align-items-center gap-1 mb-0">
+                            <input class="form-check-input mt-0" type="radio" name="promptTemplateMode" value="salesAssistant" checked />
+                            <span class="small text-secondary">業務員助理</span>
+                        </label>
+                        <label class="form-check d-inline-flex align-items-center gap-1 mb-0">
+                            <input class="form-check-input mt-0" type="radio" name="promptTemplateMode" value="claimAssistant" />
+                            <span class="small text-secondary">理賠助理</span>
+                        </label>
+                        <label class="form-check d-inline-flex align-items-center gap-1 mb-0">
+                            <input class="form-check-input mt-0" type="radio" name="promptTemplateMode" value="customerService" />
+                            <span class="small text-secondary">智能客服</span>
+                        </label>
+                    </div>
+                    <label class="form-check d-inline-flex align-items-center gap-1 mb-0 me-2">
+                        <input id="voiceOutputEnabled" class="form-check-input mt-0" type="checkbox" />
+                        <span class="small text-secondary">語音輸出</span>
+                    </label>
+                    <span id="voiceOutputStatusText" class="small text-secondary me-2">語音輸出未啟用</span>
+                    <span class="small text-secondary">Model:</span>
+                    <span class="small text-secondary" id="selectedModelText">-</span>
+                    <span class="small text-secondary model-status-separator">|</span>
+                    <span class="small text-secondary" id="statusText">待命中</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="query-side-stack" aria-label="右側功能與查詢導覽">
+        <div class="query-actions" aria-label="查詢操作">
+            <button id="historyQueryButton" type="button" class="query-action-btn" aria-label="對話紀錄" title="對話紀錄" data-bs-toggle="offcanvas" data-bs-target="#conversationHistoryPanel" aria-controls="conversationHistoryPanel" onclick="window.openConversationHistoryPanel?.()">
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M8 3a5 5 0 1 0 4.546 2.917a.75.75 0 1 1 1.364-.624A6.5 6.5 0 1 1 8 1.5V.75a.75.75 0 0 1 1.5 0V4a.75.75 0 0 1-.75.75H6.5a.75.75 0 0 1 0-1.5h1.75z" />
+                    <path d="M8.75 5.5a.75.75 0 0 0-1.5 0V8c0 .199.079.39.22.53l1.75 1.75a.75.75 0 1 0 1.06-1.06L8.75 7.69z" />
+                </svg>
+            </button>
+            <button id="newQueryButton" type="button" class="query-action-btn" aria-label="新增對話" title="新增對話">
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-9.5 9.5a.5.5 0 0 1-.168.11l-4 1.5a.5.5 0 0 1-.643-.643l1.5-4a.5.5 0 0 1 .11-.168zM11.207 2 3 10.207V13h2.793L14 4.793 11.207 2z" />
+                    <path fill-rule="evenodd" d="M1 13.5V16h2.5l10-10-2.5-2.5-10 10zM0 13a1 1 0 0 1 .276-.694l10-10a1 1 0 0 1 1.414 0l2.5 2.5a1 1 0 0 1 0 1.414l-10 10A1 1 0 0 1 3.5 16H1a1 1 0 0 1-1-1v-2z" />
+                </svg>
+            </button>
+            <button id="policyQueryButton" type="button" class="query-action-btn" aria-label="查詢保單" title="查詢保單" hidden>
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M3.5 1A1.5 1.5 0 0 0 2 2.5v11A1.5 1.5 0 0 0 3.5 15h9a1.5 1.5 0 0 0 1.5-1.5v-8a.5.5 0 0 0-.146-.354l-3-3A.5.5 0 0 0 10.5 2h-7zM10 3.707 12.293 6H10V3.707zM3.5 2h6v4.5A.5.5 0 0 0 10 7h3v6.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5z" />
+                    <path d="M4.75 9.25a.75.75 0 0 1 .75-.75h5a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1-.75-.75zM4.75 11.75a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5H5.5a.75.75 0 0 1-.75-.75z" />
+                </svg>
+            </button>
+            <button id="todoListButton" type="button" class="query-action-btn" aria-label="待辦清單" title="待辦清單" data-bs-toggle="offcanvas" data-bs-target="#todoListPanel" aria-controls="todoListPanel" onclick="window.openTodoListPanel?.()" hidden>
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zm0 1h11a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5" />
+                    <path d="M4.75 5.75a.75.75 0 0 1 .75-.75h5.25a.75.75 0 0 1 0 1.5H5.5a.75.75 0 0 1-.75-.75M4.75 8.5a.75.75 0 0 1 .75-.75h5.25a.75.75 0 0 1 0 1.5H5.5a.75.75 0 0 1-.75-.75M4.75 11.25a.75.75 0 0 1 .75-.75h3.25a.75.75 0 0 1 0 1.5H5.5a.75.75 0 0 1-.75-.75" />
+                </svg>
+            </button>
+        </div>
+
+        <aside id="queryRail" class="query-rail" aria-label="本次查詢句導覽">
+            <div class="query-rail-handle" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="query-rail-panel" role="region" aria-label="本次查詢句清單">
+                <div class="query-rail-title">本次查詢句</div>
+                <ul id="queryRailList" class="query-rail-list"></ul>
+                <div id="queryRailEmpty" class="query-rail-empty">目前尚無查詢句</div>
+            </div>
+        </aside>
+    </div>
+
+    <section id="debugPanel" class="debug-panel mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 class="panel-section-title mb-0">Debug 面板</h2>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge text-bg-secondary">System Prompt / Story Script / Keyword / LLM Result</span>
+                <button id="voiceOutputTestButton" type="button" class="btn btn-sm btn-outline-primary">語音測試</button>
+                <button id="debugToggleButton" type="button" class="btn btn-sm btn-outline-secondary" aria-expanded="true">收合</button>
+            </div>
+        </div>
+
+        <div id="debugPanelBody" class="row g-3">
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>最近一次呼叫 LLM 的 System Prompt</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmSystemPromptList" aria-label="複製 System Prompt" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmSystemPromptList" class="debug-pre">-</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>最近一次呼叫 LLM 的 Story Script</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmStoryScriptList" aria-label="複製 Story Script" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmStoryScriptList" class="debug-pre">-</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>最近一次呼叫 LLM 取得結果</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmLatestResult" aria-label="複製 LLM 結果" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmLatestResult" class="debug-pre">-</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>LLM 紀錄錯誤訊息</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmLogErrorList" aria-label="複製 LLM 紀錄錯誤訊息" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmLogErrorList" class="debug-pre">-</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>LLM 關鍵字 System Prompt</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmKeywordSystemPrompt" aria-label="複製 LLM 關鍵字 System Prompt" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmKeywordSystemPrompt" class="debug-pre">-</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>LLM 關鍵字</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmKeywordResult" aria-label="複製 LLM 關鍵字" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmKeywordResult" class="debug-pre">-</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="offcanvas offcanvas-end conversation-history-panel" tabindex="-1" id="conversationHistoryPanel" aria-labelledby="conversationHistoryPanelLabel">
+        <div class="offcanvas-header">
+            <h2 class="offcanvas-title fs-5" id="conversationHistoryPanelLabel">對話紀錄</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <div id="conversationHistoryMeta" class="text-secondary small mb-3">-</div>
+            <div id="conversationHistoryEmpty" class="text-secondary small">目前沒有可載入的對話紀錄。</div>
+            <div id="conversationHistoryList" class="list-group conversation-history-list"></div>
+        </div>
+    </div>
+
+    <div class="offcanvas offcanvas-end conversation-history-panel" tabindex="-1" id="todoListPanel" aria-labelledby="todoListPanelLabel">
+        <div class="offcanvas-header">
+            <h2 class="offcanvas-title fs-5" id="todoListPanelLabel">待辦清單</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <div id="todoListMeta" class="text-secondary small mb-3">-</div>
+            <div class="todo-section-block mb-3">
+                <h3 class="todo-section-title">待釐清訊息</h3>
+                <div id="todoInfoEmpty" class="text-secondary small">目前沒有待釐清訊息。</div>
+                <div id="todoInfoTableContainer" class="todo-table-container" hidden>
+                    <table class="table table-sm todo-table mb-0" aria-label="待釐清訊息清單">
+                        <thead>
+                            <tr>
+                                <th scope="col">欄位</th>
+                                <th scope="col">內容</th>
+                            </tr>
+                        </thead>
+                        <tbody id="todoInfoList"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="todo-section-block">
+                <h3 class="todo-section-title">待處理文件</h3>
+                <div id="todoDocumentEmpty" class="text-secondary small">目前沒有待處理文件。</div>
+                <div id="todoDocumentTableContainer" class="todo-table-container" hidden>
+                    <table class="table table-sm todo-table mb-0" aria-label="待處理文件清單">
+                        <thead>
+                            <tr>
+                                <th scope="col">文件名稱</th>
+                                <th scope="col">狀態</th>
+                                <th scope="col" class="todo-table-action-col">檢視</th>
+                            </tr>
+                        </thead>
+                        <tbody id="todoDocumentList"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts
+{
+    <script src="~/js/dialogInterface.js" asp-append-version="true"></script>
+}

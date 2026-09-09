@@ -1,0 +1,72 @@
+﻿@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/Web.styles.css" asp-append-version="true" />
+</head>
+<body data-api-base-url="@Configuration["ApiSettings:BaseUrl"]">
+    <header>
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+            <div class="container-fluid">
+                <a class="system-home-title" asp-area="" asp-controller="Home" asp-action="Index" aria-label="AI 產險行銷商品建議平台 首頁">
+                    <span class="system-home-title-en">AI INSURANCE SALES ASSISTANT</span>
+                    <span class="system-home-title-zh">AI 產險行銷商品建議平台</span>
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                        aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-end align-items-center">
+                    <div class="auth-widget ms-auto d-flex align-items-center gap-3">
+                        <div id="authUserInfo" class="auth-user-info d-none">
+                            <span id="authUserId" class="auth-user-id"></span>
+                            <span id="authUserName" class="auth-user-name"></span>
+                        </div>
+                        <button id="authActionButton" type="button" class="btn auth-action-btn">
+                            <span id="authActionIcon" class="auth-action-icon" aria-hidden="true"></span>
+                            <span id="authActionText">登入</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <div class="container">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content login-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="loginModalLabel">登入</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label fw-semibold" for="loginUserIdInput">使用者ID</label>
+                    <input id="loginUserIdInput" type="text" class="form-control" maxlength="50" autocomplete="username" placeholder="請輸入使用者ID" />
+                    <div id="loginErrorText" class="text-danger small mt-2 d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button id="loginSubmitButton" type="button" class="btn btn-query">登入</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/auth.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

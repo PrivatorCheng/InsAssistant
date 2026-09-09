@@ -1,0 +1,15 @@
+# 忽略前端的套件與打包產物
+Web/node_modules/
+Web/dist/
+
+# 忽略後端的套件與環境變數
+API/node_modules/
+API/.env
+
+# 忽略其他文件檔案
+.copilot_obj/
+.github/
+doc/
+query_history/
+query_spec/
+
