@@ -6,7 +6,30 @@ Web/dist/
 API/node_modules/
 API/.env
 
-# 忽略其他文件檔案
+
+# 忽略前端 Web 的套件與編譯產物
+Web/node_modules/
+Web/dist/
+Web/.env.local
+
+# 忽略後端 API 的套件與環境變數
+API/node_modules/
+API/.env
+API/*.log
+
+# --- 新增：針對 C# / .NET 專案的過濾 ---
+# 忽略所有編譯產出的資料夾（bin 和 obj）
+**/bin/
+**/obj/
+
+# 忽略獨立的編譯副檔名（保險起見）
+*.exe
+*.dll
+*.pdb
+*.suo
+*.user
+
+# 忽略非原始碼的檔案
 .copilot_obj/
 .github/
 doc/

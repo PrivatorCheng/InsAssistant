@@ -12,6 +12,10 @@ using Microsoft.SemanticKernel.Connectors.Qdrant;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile(
+    path: ".env/DBConnection.json",
+    optional: false,
+    reloadOnChange: true);
+builder.Configuration.AddJsonFile(
     path: ".env/LLMSettings.json",
     optional: false,
     reloadOnChange: true);
