@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ErrorLog>vulnerability_report.sarif,version=2.1</ErrorLog>
   </PropertyGroup>
 
   <ItemGroup>

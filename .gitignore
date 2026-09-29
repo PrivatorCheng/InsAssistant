@@ -28,6 +28,7 @@ API/*.log
 *.pdb
 *.suo
 *.user
+*.sarif
 
 # 忽略非原始碼的檔案
 .copilot_obj/

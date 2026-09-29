@@ -18,7 +18,7 @@ namespace API.Controllers.Insurance;
 /// </summary>
 [Route("api/insurance/chat")]
 [ApiController]
-[AllowAnonymous]
+[Authorize]
 public class InsuranceChatController : ControllerBase
 {
     private const string PromptTemplateModeSalesAssistant = "salesAssistant";
