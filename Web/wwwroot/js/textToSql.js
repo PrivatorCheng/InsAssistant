@@ -100,7 +100,7 @@ async function loadLlmProviderOptions() {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-            const response = await fetch(`${baseUrl}/api/g1/text-to-sql/llm-providers`, {
+            const response = await fetch(`${baseUrl}/api/g1/llm-providers/options`, {
                 method: "GET",
                 credentials: "include"
             });

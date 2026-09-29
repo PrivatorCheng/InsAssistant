@@ -126,7 +126,7 @@
         <div class="d-flex align-items-center justify-content-between mb-3">
             <h2 class="panel-section-title mb-0">Debug 面板</h2>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge text-bg-secondary">System Prompt / Story Script / Keyword / LLM Result</span>
+                <span class="badge text-bg-secondary">System / Context / History / User / Keyword / LLM Result</span>
                 <button id="voiceOutputTestButton" type="button" class="btn btn-sm btn-outline-primary">語音測試</button>
                 <button id="debugToggleButton" type="button" class="btn btn-sm btn-outline-secondary" aria-expanded="true">收合</button>
             </div>
@@ -151,8 +151,8 @@
             <div class="col-12">
                 <div class="debug-card">
                     <div class="debug-card-header">
-                        <h3>最近一次呼叫 LLM 的 Story Script</h3>
-                        <button type="button" class="debug-copy-btn" data-copy-target="llmStoryScriptList" aria-label="複製 Story Script" title="複製">
+                        <h3>最近一次呼叫 LLM 的 Context</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmContextTextList" aria-label="複製 Context" title="複製">
                             <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                                 <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
                                 <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
@@ -160,7 +160,37 @@
                             <span>複製</span>
                         </button>
                     </div>
-                    <div id="llmStoryScriptList" class="debug-pre">-</div>
+                    <div id="llmContextTextList" class="debug-pre">-</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>最近一次呼叫 LLM 的 History</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmHistoryTextList" aria-label="複製 History" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmHistoryTextList" class="debug-pre">-</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="debug-card">
+                    <div class="debug-card-header">
+                        <h3>最近一次呼叫 LLM 的 User</h3>
+                        <button type="button" class="debug-copy-btn" data-copy-target="llmUserTextList" aria-label="複製 User" title="複製">
+                            <svg class="debug-copy-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M10 1H3a2 2 0 0 0-2 2v7h2V3h7V1z" />
+                                <path d="M13 4H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 9H6V6h7v7z" />
+                            </svg>
+                            <span>複製</span>
+                        </button>
+                    </div>
+                    <div id="llmUserTextList" class="debug-pre">-</div>
                 </div>
             </div>
             <div class="col-12">

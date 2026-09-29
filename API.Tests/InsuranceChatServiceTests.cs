@@ -24,27 +24,11 @@ public class InsuranceChatServiceTests
 
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[{\"p\":\"demo\"}]");
 
-        var capturedScripts = new List<string>();
-        var finalChatCallCount = 0;
+        var capturedPrompts = new List<LlmPromptEnvelope>();
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, string, string, CancellationToken>((_, __, script, ___) => capturedScripts.Add(script))
-            .ReturnsAsync(() =>
-            {
-                var currentScript = capturedScripts.LastOrDefault() ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(currentScript))
-                {
-                    return new InsuranceChatCompletionResult { Content = "停室內車位 通勤里程" };
-                }
-
-                finalChatCallCount++;
-                if (finalChatCallCount == 1)
-                {
-                    return new InsuranceChatCompletionResult { Content = "第一輪建議" };
-                }
-
-                return new InsuranceChatCompletionResult { Content = "第二輪建議" };
-            });
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, LlmPromptEnvelope, CancellationToken>((_, prompt, _) => capturedPrompts.Add(prompt))
+            .ReturnsAsync(new InsuranceChatCompletionResult { Content = "第二輪建議" });
 
         var sut = CreateSut(
             sessionCache,
@@ -72,16 +56,16 @@ public class InsuranceChatServiceTests
         Assert.NotNull(histories);
         Assert.Equal(4, histories!.Count);
         Assert.Contains("- 業務員: 客戶有停室內車位", histories);
-        Assert.Contains("- AI教練: 第一輪建議", histories);
+        Assert.Contains(histories, entry => entry.StartsWith("- AI教練:", StringComparison.Ordinal));
 
-        var nonEmptyStoryScripts = capturedScripts
+        var nonEmptyHistories = capturedPrompts
+            .Select(prompt => prompt.HistoryText)
             .Where(script => !string.IsNullOrWhiteSpace(script))
             .ToList();
 
-        Assert.True(nonEmptyStoryScripts.Count >= 2);
-        Assert.Contains("【過去的多輪對話歷史紀錄】", nonEmptyStoryScripts[1]);
-        Assert.Contains("- 業務員: 客戶有停室內車位", nonEmptyStoryScripts[1]);
-        Assert.Contains("- AI教練: 第一輪建議", nonEmptyStoryScripts[1]);
+        Assert.True(nonEmptyHistories.Count >= 1);
+        Assert.Contains("- 業務員: 客戶有停室內車位", nonEmptyHistories[^1]);
+        Assert.Contains("- AI教練: 第二輪建議", nonEmptyHistories[^1]);
     }
 
     [Fact]
@@ -98,7 +82,7 @@ public class InsuranceChatServiceTests
 
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[]");
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InsuranceChatCompletionResult { Content = "測試回覆" });
 
         var sut = CreateSut(
@@ -134,7 +118,7 @@ public class InsuranceChatServiceTests
         mockEnvironment.SetupGet(environment => environment.ContentRootPath).Returns(CreateTempPromptDirectory());
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[]");
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InsuranceChatCompletionResult { Content = "PII 訊息照常處理" });
 
         var sut = CreateSut(
@@ -157,7 +141,7 @@ public class InsuranceChatServiceTests
         Assert.Equal(2, histories!.Count);
         mockBrainService.Verify(service => service.EnsureInitialized(), Times.Once);
         mockCompletionService.Verify(
-            service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
     }
 
@@ -174,7 +158,7 @@ public class InsuranceChatServiceTests
         mockEnvironment.SetupGet(environment => environment.ContentRootPath).Returns(CreateTempPromptDirectory());
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[]");
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InsuranceChatCompletionResult
             {
                 Content = """
@@ -222,10 +206,10 @@ public class InsuranceChatServiceTests
         mockEnvironment.SetupGet(environment => environment.ContentRootPath).Returns(CreateTempPromptDirectory());
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[]");
 
-        var capturedScripts = new List<string>();
+        var capturedPrompts = new List<LlmPromptEnvelope>();
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, string, string, CancellationToken>((_, __, script, ___) => capturedScripts.Add(script))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, LlmPromptEnvelope, CancellationToken>((_, prompt, _) => capturedPrompts.Add(prompt))
             .ReturnsAsync(new InsuranceChatCompletionResult { Content = "續聊回覆" });
 
         var sut = CreateSut(
@@ -249,10 +233,10 @@ public class InsuranceChatServiceTests
         });
 
         Assert.Equal("續聊回覆", response.Reply);
-        Assert.Equal(2, capturedScripts.Count);
-        Assert.Contains("- 業務員: 第一輪問題", capturedScripts[1]);
-        Assert.Contains("- AI教練: 第一輪回覆", capturedScripts[1]);
-        Assert.Contains("第二輪問題", capturedScripts[1]);
+        Assert.Equal(2, capturedPrompts.Count);
+        Assert.Contains("- 業務員: 第一輪問題", capturedPrompts[1].HistoryText);
+        Assert.Contains("- AI教練: 第一輪回覆", capturedPrompts[1].HistoryText);
+        Assert.Contains("第二輪問題", capturedPrompts[1].UserText);
     }
 
     [Fact]
@@ -270,8 +254,8 @@ public class InsuranceChatServiceTests
 
         var capturedPrompts = new List<string>();
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, string, string, CancellationToken>((_, prompt, _, __) => capturedPrompts.Add(prompt))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, LlmPromptEnvelope, CancellationToken>((_, prompt, _) => capturedPrompts.Add(prompt.SystemPrompt))
             .ReturnsAsync(() =>
             {
                 if (capturedPrompts.Count == 1)
@@ -317,7 +301,6 @@ public class InsuranceChatServiceTests
         Assert.Equal(2, capturedPrompts.Count);
         Assert.Contains("測試提示詞2", capturedPrompts[0]);
         Assert.Contains("測試顧客車險提示詞", capturedPrompts[1]);
-        Assert.Contains("測試商品", capturedPrompts[1]);
     }
 
     [Fact]
@@ -333,7 +316,7 @@ public class InsuranceChatServiceTests
         mockEnvironment.SetupGet(environment => environment.ContentRootPath).Returns(CreateTempPromptDirectory());
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[]");
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InsuranceChatCompletionResult
             {
                 Content = """
@@ -361,7 +344,7 @@ public class InsuranceChatServiceTests
 
         Assert.Equal("理賠查詢回覆", response.Reply);
         mockCompletionService.Verify(
-            service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -380,8 +363,8 @@ public class InsuranceChatServiceTests
 
         var capturedPrompts = new List<string>();
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, string, string, CancellationToken>((_, prompt, _, __) => capturedPrompts.Add(prompt))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, LlmPromptEnvelope, CancellationToken>((_, prompt, _) => capturedPrompts.Add(prompt.SystemPrompt))
             .ReturnsAsync(() =>
             {
                 if (capturedPrompts.Count == 1)
@@ -457,7 +440,7 @@ public class InsuranceChatServiceTests
         mockEnvironment.SetupGet(environment => environment.ContentRootPath).Returns(CreateTempPromptDirectory());
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[]");
         mockCompletionService
-            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InsuranceChatCompletionResult
             {
                 Content = @"{

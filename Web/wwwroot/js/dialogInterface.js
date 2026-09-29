@@ -220,7 +220,7 @@ async function loadLlmProviderOptions() {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-            const response = await fetch(`${baseUrl}/api/g1/text-to-sql/llm-providers`, {
+            const response = await fetch(`${baseUrl}/api/g1/llm-providers/options`, {
                 method: "GET",
                 credentials: "include"
             });
@@ -1082,9 +1082,19 @@ function appendSystemPromptDebug(systemPrompt) {
     setDebugTextWithCopySource(promptList, systemPrompt, DEBUG_PANEL_MAX_DISPLAY_CHARS);
 }
 
-function appendStoryScriptDebug(storyScript) {
-    const scriptList = document.getElementById("llmStoryScriptList");
-    setDebugTextWithCopySource(scriptList, storyScript, DEBUG_PANEL_MAX_DISPLAY_CHARS);
+function appendContextDebug(contextText) {
+    const contextList = document.getElementById("llmContextTextList");
+    setDebugTextWithCopySource(contextList, contextText, DEBUG_PANEL_MAX_DISPLAY_CHARS);
+}
+
+function appendHistoryDebug(historyText) {
+    const historyList = document.getElementById("llmHistoryTextList");
+    setDebugTextWithCopySource(historyList, historyText, DEBUG_PANEL_MAX_DISPLAY_CHARS);
+}
+
+function appendUserDebug(userText) {
+    const userList = document.getElementById("llmUserTextList");
+    setDebugTextWithCopySource(userList, userText, DEBUG_PANEL_MAX_DISPLAY_CHARS);
 }
 
 function appendKeywordSystemPromptDebug(keywordSystemPrompt) {
@@ -1378,7 +1388,9 @@ function buildUploadedDocumentDebugDisplay(items, selector) {
 function resetQueryView(clearConversation = false) {
     if (clearConversation) {
         const promptList = document.getElementById("llmSystemPromptList");
-        const scriptList = document.getElementById("llmStoryScriptList");
+        const contextList = document.getElementById("llmContextTextList");
+        const historyList = document.getElementById("llmHistoryTextList");
+        const userList = document.getElementById("llmUserTextList");
         const keywordPromptBlock = document.getElementById("llmKeywordSystemPrompt");
         const keywordBlock = document.getElementById("llmKeywordResult");
         const resultBlock = document.getElementById("llmLatestResult");
@@ -1387,9 +1399,17 @@ function resetQueryView(clearConversation = false) {
             promptList.textContent = "-";
             promptList.removeAttribute("data-copy-full-text");
         }
-        if (scriptList) {
-            scriptList.textContent = "-";
-            scriptList.removeAttribute("data-copy-full-text");
+        if (contextList) {
+            contextList.textContent = "-";
+            contextList.removeAttribute("data-copy-full-text");
+        }
+        if (historyList) {
+            historyList.textContent = "-";
+            historyList.removeAttribute("data-copy-full-text");
+        }
+        if (userList) {
+            userList.textContent = "-";
+            userList.removeAttribute("data-copy-full-text");
         }
         if (keywordPromptBlock) {
             keywordPromptBlock.textContent = "-";
@@ -3006,7 +3026,9 @@ function initializePage() {
             setCurrentPolicyInsureTypeList(response.insure_type_list || response.insureTypeList || currentPolicyInsureTypeList);
             const reply = normalizeEscapedLineBreaks((response.reply || "").toString().trim());
             appendSystemPromptDebug((response.systemPrompt || "").toString());
-            appendStoryScriptDebug((response.storyScript || "").toString());
+            appendContextDebug((response.contextText || response.context_text || "").toString());
+            appendHistoryDebug((response.historyText || response.history_text || "").toString());
+            appendUserDebug((response.userText || response.user_text || "").toString());
             appendKeywordSystemPromptDebug((response.llmKeywordSystemPrompt || response.llm_keyword_system_prompt || "").toString());
             appendKeywordDebug((response.llmKeyword || response.llm_keyword || "").toString());
             appendLlmLogErrorsDebug(response.llmLogErrors || response.llm_log_errors || []);

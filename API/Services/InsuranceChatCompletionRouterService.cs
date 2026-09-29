@@ -36,7 +36,10 @@ public sealed class InsuranceChatCompletionRouterService : IInsuranceChatComplet
         _myLlamaQueryPlanningService = myLlamaQueryPlanningService;
     }
 
-    public Task<InsuranceChatCompletionResult> ExecuteAsync(string? llmProvider, string systemPrompt, string userMessage, CancellationToken cancellationToken = default)
+    public Task<InsuranceChatCompletionResult> ExecuteAsync(
+        string? llmProvider,
+        LlmPromptEnvelope prompt,
+        CancellationToken cancellationToken = default)
     {
         var provider = string.IsNullOrWhiteSpace(llmProvider)
             ? LlmProviderResolver.ResolveProvider(_configuration)
@@ -46,36 +49,35 @@ public sealed class InsuranceChatCompletionRouterService : IInsuranceChatComplet
 
         if (planner.Equals("Gpt", StringComparison.OrdinalIgnoreCase))
         {
-            return _gptQueryPlanningService.ExecuteAsync(provider, systemPrompt, userMessage, cancellationToken);
+            return _gptQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("Groq", StringComparison.OrdinalIgnoreCase))
         {
-            return _groqQueryPlanningService.ExecuteAsync(provider, systemPrompt, userMessage, cancellationToken);
+            return _groqQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("Github", StringComparison.OrdinalIgnoreCase))
         {
-            return _githubQueryPlanningService.ExecuteAsync(provider, systemPrompt, userMessage, cancellationToken);
+            return _githubQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("Nim", StringComparison.OrdinalIgnoreCase))
         {
-            return _nimQueryPlanningService.ExecuteAsync(provider, systemPrompt, userMessage, cancellationToken);
+            return _nimQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("MyLlama", StringComparison.OrdinalIgnoreCase))
         {
-            return _myLlamaQueryPlanningService.ExecuteAsync(provider, systemPrompt, userMessage, cancellationToken);
+            return _myLlamaQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
-        return _geminiQueryPlanningService.ExecuteAsync(provider, systemPrompt, userMessage, cancellationToken);
+        return _geminiQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
     }
 
     public Task<InsuranceChatCompletionResult> ExecuteWithInlineImageAsync(
         string? llmProvider,
-        string systemPrompt,
-        string userMessage,
+        LlmPromptEnvelope prompt,
         byte[] imageBytes,
         string mimeType,
         CancellationToken cancellationToken = default)
@@ -90,13 +92,12 @@ public sealed class InsuranceChatCompletionRouterService : IInsuranceChatComplet
         {
             return _geminiQueryPlanningService.ExecuteWithInlineImageAsync(
                 provider,
-                systemPrompt,
-                userMessage,
+                prompt,
                 imageBytes,
                 mimeType,
                 cancellationToken);
         }
 
-        return ExecuteAsync(provider, systemPrompt, userMessage, cancellationToken);
+        return ExecuteAsync(provider, prompt, cancellationToken);
     }
 }
