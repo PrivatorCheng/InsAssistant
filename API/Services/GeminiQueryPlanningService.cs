@@ -80,9 +80,6 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
                 {
                     var stopwatch = Stopwatch.StartNew();
                     var client = new Client(apiKey: settings.ApiKey);
-
-                    var mergedPrompt = BuildMergedUserPrompt(systemPrompt, userPrompt);
-
                     var contents = new List<Content>
                     {
                         new()
@@ -90,7 +87,15 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
                             Role = "user",
                             Parts = new List<Part>
                             {
-                                new() { Text = mergedPrompt }
+                                new() { Text = $"[SYSTEM_PROMPT]\n{systemPrompt}" }
+                            }
+                        },
+                        new()
+                        {
+                            Role = "user",
+                            Parts = new List<Part>
+                            {
+                                new() { Text = userPrompt }
                             }
                         }
                     };
@@ -123,7 +128,7 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
                         OutputToken = outputToken,
                         CacheLength = cacheLength,
                         DurationMs = stopwatch.ElapsedMilliseconds,
-                        PromptLength = mergedPrompt.Length,
+                        PromptLength = systemPrompt.Length + userPrompt.Length,
                         ResponseLength = textContent.Length
                     };
 
@@ -171,8 +176,13 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
     /// <summary>
     /// 對話模式呼叫 Gemini 並回傳純文字結果。
     /// </summary>
-    public async Task<InsuranceChatCompletionResult> ExecuteAsync(string? llmProvider, string systemPrompt, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<InsuranceChatCompletionResult> ExecuteAsync(
+        string? llmProvider,
+        LlmPromptEnvelope prompt,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(prompt);
+
         var settings = GetSettings(llmProvider);
         var models = ParseModels(settings.Model);
         var cachedContentName = await TryResolveCachedContentNameAsync(cancellationToken);
@@ -184,20 +194,7 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
             {
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 var client = new Client(apiKey: settings.ApiKey);
-
-                var mergedPrompt = BuildMergedUserPrompt(systemPrompt, userMessage);
-
-                var contents = new List<Content>
-                {
-                    new()
-                    {
-                        Role = "user",
-                        Parts = new List<Part>
-                        {
-                            new() { Text = mergedPrompt }
-                        }
-                    }
-                };
+                var contents = BuildPromptContents(prompt);
 
                 var response = await GenerateContentWithOptionalCacheAsync(
                     client,
@@ -255,12 +252,12 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
     /// </summary>
     public async Task<InsuranceChatCompletionResult> ExecuteWithInlineImageAsync(
         string? llmProvider,
-        string systemPrompt,
-        string userMessage,
+        LlmPromptEnvelope prompt,
         byte[] imageBytes,
         string mimeType,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(prompt);
         ArgumentNullException.ThrowIfNull(imageBytes);
         if (imageBytes.Length == 0)
         {
@@ -282,27 +279,23 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
                 var stopwatch = Stopwatch.StartNew();
                 var client = new Client(apiKey: settings.ApiKey);
 
-                var mergedPrompt = BuildMergedUserPrompt(systemPrompt, userMessage);
-
-                var contents = new List<Content>
+                var contents = BuildPromptContents(prompt, includeUserText: false);
+                contents.Add(new Content
                 {
-                    new()
+                    Role = "user",
+                    Parts = new List<Part>
                     {
-                        Role = "user",
-                        Parts = new List<Part>
+                        new() { Text = string.IsNullOrWhiteSpace(prompt.UserText) ? "請解析這張影像。" : prompt.UserText },
+                        new()
                         {
-                            new() { Text = mergedPrompt },
-                            new()
+                            InlineData = new Blob
                             {
-                                InlineData = new Blob
-                                {
-                                    Data = imageBytes,
-                                    MimeType = normalizedMimeType
-                                }
+                                Data = imageBytes,
+                                MimeType = normalizedMimeType
                             }
                         }
                     }
-                };
+                });
 
                 // 影像上傳辨識不接 context cache，避免與對話快取脈絡耦合。
                 var response = await client.Models.GenerateContentAsync(
@@ -402,9 +395,57 @@ public sealed class GeminiQueryPlanningService : IQueryPlanningService, IInsuran
             : string.Join("\n", textParts);
     }
 
-    private static string BuildMergedUserPrompt(string systemPrompt, string userPrompt)
+    private static List<Content> BuildPromptContents(LlmPromptEnvelope prompt, bool includeUserText = true)
     {
-        return $"[SYSTEM_INSTRUCTION]\n{systemPrompt}\n\n[USER_MESSAGE]\n{userPrompt}";
+        var contents = new List<Content>
+        {
+            new()
+            {
+                Role = "user",
+                Parts = new List<Part>
+                {
+                    new() { Text = $"[SYSTEM_PROMPT]\n{prompt.SystemPrompt}" }
+                }
+            }
+        };
+
+        if (!string.IsNullOrWhiteSpace(prompt.ContextText))
+        {
+            contents.Add(new Content
+            {
+                Role = "user",
+                Parts = new List<Part>
+                {
+                    new() { Text = $"[CONTEXT]\n{prompt.ContextText}" }
+                }
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(prompt.HistoryText))
+        {
+            contents.Add(new Content
+            {
+                Role = "user",
+                Parts = new List<Part>
+                {
+                    new() { Text = $"[HISTORY]\n{prompt.HistoryText}" }
+                }
+            });
+        }
+
+        if (includeUserText && !string.IsNullOrWhiteSpace(prompt.UserText))
+        {
+            contents.Add(new Content
+            {
+                Role = "user",
+                Parts = new List<Part>
+                {
+                    new() { Text = prompt.UserText }
+                }
+            });
+        }
+
+        return contents;
     }
 
     private async Task<string?> TryResolveCachedContentNameAsync(CancellationToken cancellationToken)

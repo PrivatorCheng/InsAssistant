@@ -115,10 +115,14 @@ public class InsuranceChatController : ControllerBase
         {
             var requestTime = DateTime.Now;
             var userMessage = BuildImageUploadUserMessage(mimeType, normalizedFileName);
+            var prompt = new LlmPromptEnvelope
+            {
+                SystemPrompt = _imagePromptTemplate,
+                UserText = userMessage
+            };
             var completion = await _chatCompletionService.ExecuteWithInlineImageAsync(
                 request.LlmProvider,
-                _imagePromptTemplate,
-                userMessage,
+                prompt,
                 imageBytes,
                 ImageUploadLlmMimeType,
                 cancellationToken);
@@ -140,7 +144,7 @@ public class InsuranceChatController : ControllerBase
                 completion.OutputToken,
                 completion.CacheLength,
                 completion.DurationMs,
-                _imagePromptTemplate.Length + userMessage.Length,
+                prompt.SystemPrompt.Length + prompt.UserText.Length,
                 completion.Content.Length,
                 completion.IsSuccess,
                 requestTime,

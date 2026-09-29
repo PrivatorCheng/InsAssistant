@@ -225,8 +225,13 @@ public sealed class MyLlamaQueryPlanningService : IQueryPlanningService, IInsura
             .ToList();
     }
 
-    public async Task<InsuranceChatCompletionResult> ExecuteAsync(string? llmProvider, string systemPrompt, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<InsuranceChatCompletionResult> ExecuteAsync(
+        string? llmProvider,
+        LlmPromptEnvelope prompt,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(prompt);
+
         var settings = GetSettings(llmProvider);
         var models = ParseModels(settings.Model);
         Exception? lastException = null;
@@ -243,11 +248,7 @@ public sealed class MyLlamaQueryPlanningService : IQueryPlanningService, IInsura
                     model,
                     stream = false,
                     options = new { temperature = 0 },
-                    messages = new object[]
-                    {
-                        new { role = "system", content = systemPrompt },
-                        new { role = "user", content = userMessage }
-                    }
+                    messages = BuildMessages(prompt)
                 };
 
                 using var content = new StringContent(
@@ -299,5 +300,26 @@ public sealed class MyLlamaQueryPlanningService : IQueryPlanningService, IInsura
         }
 
         throw lastException ?? new InvalidOperationException("MyLlama model 清單為空，請檢查 LlmSettings:MyLlama:Model 設定");
+    }
+
+    private static object[] BuildMessages(LlmPromptEnvelope prompt)
+    {
+        var messages = new List<object>
+        {
+            new { role = "system", content = prompt.SystemPrompt }
+        };
+
+        if (!string.IsNullOrWhiteSpace(prompt.ContextText))
+        {
+            messages.Add(new { role = "user", content = $"[CONTEXT]\n{prompt.ContextText}" });
+        }
+
+        if (!string.IsNullOrWhiteSpace(prompt.HistoryText))
+        {
+            messages.Add(new { role = "user", content = $"[HISTORY]\n{prompt.HistoryText}" });
+        }
+
+        messages.Add(new { role = "user", content = prompt.UserText });
+        return messages.ToArray();
     }
 }

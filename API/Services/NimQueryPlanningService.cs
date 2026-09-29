@@ -281,8 +281,13 @@ public sealed class NimQueryPlanningService : IQueryPlanningService, IInsuranceC
         return DefaultNimChatCompletionsEndpoint;
     }
 
-    public async Task<InsuranceChatCompletionResult> ExecuteAsync(string? llmProvider, string systemPrompt, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<InsuranceChatCompletionResult> ExecuteAsync(
+        string? llmProvider,
+        LlmPromptEnvelope prompt,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(prompt);
+
         var settings = GetSettings(llmProvider);
         var endpoint = ResolveEndpoint(settings);
         var models = ParseModels(settings.Model);
@@ -298,11 +303,7 @@ public sealed class NimQueryPlanningService : IQueryPlanningService, IInsuranceC
                 {
                     model,
                     temperature = 0,
-                    messages = new object[]
-                    {
-                        new { role = "system", content = systemPrompt },
-                        new { role = "user", content = userMessage }
-                    }
+                    messages = BuildMessages(prompt)
                 };
 
                 var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
@@ -409,5 +410,26 @@ public sealed class NimQueryPlanningService : IQueryPlanningService, IInsuranceC
         }
 
         return normalized[..120];
+    }
+
+    private static object[] BuildMessages(LlmPromptEnvelope prompt)
+    {
+        var messages = new List<object>
+        {
+            new { role = "system", content = prompt.SystemPrompt }
+        };
+
+        if (!string.IsNullOrWhiteSpace(prompt.ContextText))
+        {
+            messages.Add(new { role = "user", content = $"[CONTEXT]\n{prompt.ContextText}" });
+        }
+
+        if (!string.IsNullOrWhiteSpace(prompt.HistoryText))
+        {
+            messages.Add(new { role = "user", content = $"[HISTORY]\n{prompt.HistoryText}" });
+        }
+
+        messages.Add(new { role = "user", content = prompt.UserText });
+        return messages.ToArray();
     }
 }

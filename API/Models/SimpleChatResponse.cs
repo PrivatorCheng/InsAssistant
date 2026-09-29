@@ -21,6 +21,21 @@ public class SimpleChatResponse
     public required string StoryScript { get; set; }
 
     /// <summary>
+    /// 本次呼叫 LLM 傳送的 Context 內容（僅供 Debug 顯示）。
+    /// </summary>
+    public string? ContextText { get; set; }
+
+    /// <summary>
+    /// 本次呼叫 LLM 傳送的 History 內容（僅供 Debug 顯示）。
+    /// </summary>
+    public string? HistoryText { get; set; }
+
+    /// <summary>
+    /// 本次呼叫 LLM 傳送的 User 內容（僅供 Debug 顯示）。
+    /// </summary>
+    public string? UserText { get; set; }
+
+    /// <summary>
     /// 本次對話實際使用的 Provider。
     /// </summary>
     public string? LlmProvider { get; set; }
