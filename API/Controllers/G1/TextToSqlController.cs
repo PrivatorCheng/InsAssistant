@@ -52,7 +52,6 @@ public class TextToSqlController : ControllerBase
     /// 自然語言查詢報表。
     /// </summary>
     [HttpPost("queryTextToSql")]
-    [AllowAnonymous]
     public async Task<ResponseDataSchema<TextToSqlResult>> QueryTextToSql(
         [FromBody] NaturalLanguageQueryRequest request,
         CancellationToken cancellationToken)

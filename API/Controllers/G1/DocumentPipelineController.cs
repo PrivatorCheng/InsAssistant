@@ -11,6 +11,7 @@ namespace API.Controllers.G1;
 /// </summary>
 [ApiController]
 [Route("api/g1/document-pipeline")]
+[Authorize]
 public class DocumentPipelineController : ControllerBase
 {
     private readonly IDocumentPipelineService _documentPipelineService;
@@ -24,7 +25,6 @@ public class DocumentPipelineController : ControllerBase
     /// 將 PDF 文件內容抽取後，進行結構化抽取並整理為 JSON 字串。
     /// </summary>
     [HttpPost("extract-pdf-json")]
-    [AllowAnonymous]
     public async Task<ResponseDataSchema<string>> ExtractPdfJson(
         [FromForm] IFormFile? file,
         [FromForm] string? sessionId,

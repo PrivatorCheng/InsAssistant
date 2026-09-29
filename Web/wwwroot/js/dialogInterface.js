@@ -98,6 +98,36 @@ function getStorageUser() {
     }
 }
 
+async function ensureLoggedInForLlmQuery(statusElement) {
+    let currentUser = getStorageUser();
+    const currentUserId = ((currentUser === null || currentUser === void 0 ? void 0 : currentUser.userId) || "").toString().trim();
+    if (currentUserId) {
+        return currentUser;
+    }
+
+    if (window.syncAuthStateFromServer) {
+        currentUser = await window.syncAuthStateFromServer();
+    }
+
+    const syncedUserId = ((currentUser === null || currentUser === void 0 ? void 0 : currentUser.userId) || "").toString().trim();
+    if (syncedUserId) {
+        return currentUser;
+    }
+
+    if (statusElement) {
+        statusElement.textContent = "請先登入後再提交查詢";
+    }
+
+    simpleAlert("請先登入後再提交查詢。");
+
+    const authActionButton = document.getElementById("authActionButton");
+    if (authActionButton instanceof HTMLButtonElement) {
+        authActionButton.click();
+    }
+
+    return null;
+}
+
 function buildInsuranceChatHeaders() {
     const headers = {
         "Content-Type": "application/json"
@@ -2949,9 +2979,9 @@ function initializePage() {
             simpleAlert("請先輸入查詢內容。");
             return;
         }
-        let currentUser = getStorageUser();
-        if (!currentUser && window.syncAuthStateFromServer) {
-            currentUser = await window.syncAuthStateFromServer();
+        const currentUser = await ensureLoggedInForLlmQuery(statusText);
+        if (!currentUser) {
+            return;
         }
         if (isVoiceRecording && speechRecognition) {
             clearVoiceAutoSubmitTimer();
