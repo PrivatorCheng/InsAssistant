@@ -27,62 +27,42 @@ if (string.IsNullOrWhiteSpace(qdrantHost))
 }
 
 var qdrantGrpcPort = builder.Configuration.GetValue<int?>("Qdrant:GrpcPort") ?? 6334;
+var qdrantHttps = builder.Configuration.GetValue<bool?>("Qdrant:Https") ?? true;
+var qdrantApiKey = builder.Configuration["Qdrant:ApiKey"]?.Trim();
+
+if (!qdrantHttps)
+{
+    throw new InvalidOperationException("Qdrant:Https 必須設定為 true 以啟用 TLS 連線。");
+}
+
+if (string.IsNullOrWhiteSpace(qdrantApiKey))
+{
+    throw new InvalidOperationException("Qdrant:ApiKey 未設定，請於 .env/DBConnection.json 的 Qdrant 區塊提供 API Key。");
+}
 
 const string FrontendCorsPolicy = "FrontendCorsPolicy";
 
-builder.Services.AddScoped<GeminiQueryPlanningService>();
+builder.Services.AddScoped<GeminiChatCompletionService>();
 builder.Services.AddScoped<IInsuranceChatCompletionService, InsuranceChatCompletionRouterService>();
-builder.Services.AddScoped<GroqQueryPlanningService>();
-builder.Services.AddScoped<GptQueryPlanningService>();
-builder.Services.AddScoped<GithubQueryPlanningService>();
-builder.Services.AddScoped<NimQueryPlanningService>();
-builder.Services.AddScoped<MyLlamaQueryPlanningService>();
+builder.Services.AddScoped<GroqChatCompletionService>();
+builder.Services.AddScoped<GptChatCompletionService>();
+builder.Services.AddScoped<GithubChatCompletionService>();
+builder.Services.AddScoped<NimChatCompletionService>();
+builder.Services.AddScoped<MyLlamaChatCompletionService>();
 builder.Services.AddSingleton<ConcurrentDictionary<string, List<string>>>();
 builder.Services.Configure<PiperLivePlayerSettings>(builder.Configuration.GetSection(PiperLivePlayerSettings.SectionName));
 builder.Services.AddHttpClient();
 builder.Services.AddQdrantVectorStore(
     host: qdrantHost,
     port: qdrantGrpcPort,
-    https: false,
-    apiKey: null,
+    https: qdrantHttps,
+    apiKey: qdrantApiKey,
     options: new QdrantVectorStoreOptions(),
     lifetime: ServiceLifetime.Singleton);
 
 // 註冊系統資料庫上下文
 builder.Services.AddDbContext<SysDatabaseContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("SysDatabase")));
-
-builder.Services.AddScoped<IQueryPlanningService>(serviceProvider =>
-{
-    var llmProvider = LlmProviderResolver.ResolveProvider(serviceProvider.GetRequiredService<IConfiguration>());
-
-    if (llmProvider.Equals("Gpt", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<GptQueryPlanningService>();
-    }
-
-    if (llmProvider.Equals("Groq", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<GroqQueryPlanningService>();
-    }
-
-    if (llmProvider.Equals("Github", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<GithubQueryPlanningService>();
-    }
-
-    if (llmProvider.Equals("Nim", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<NimQueryPlanningService>();
-    }
-
-    if (llmProvider.Equals("MyLlama", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<MyLlamaQueryPlanningService>();
-    }
-
-    return serviceProvider.GetRequiredService<GeminiQueryPlanningService>();
-});
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>

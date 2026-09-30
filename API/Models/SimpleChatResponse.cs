@@ -11,6 +11,11 @@ public class SimpleChatResponse
     public required string Reply { get; set; }
 
     /// <summary>
+    /// AI 教練回覆內容（已做 HTML 編碼，供前端安全渲染）。
+    /// </summary>
+    public string SafeReplyHtml { get; set; } = string.Empty;
+
+    /// <summary>
     /// 本次呼叫 LLM 使用的 System Prompt。
     /// </summary>
     public required string SystemPrompt { get; set; }
@@ -89,6 +94,11 @@ public class SimpleChatResponse
     /// 最後一次 LLM 原始回覆內容（僅供 Debug 顯示）。
     /// </summary>
     public string? LlmRawReply { get; set; }
+
+    /// <summary>
+    /// 最後一次 LLM 原始回覆內容（已做 HTML 編碼，供前端安全渲染）。
+    /// </summary>
+    public string SafeLlmRawReplyHtml { get; set; } = string.Empty;
 
     /// <summary>
     /// 第一次呼叫 LLM（關鍵字擷取）使用的 System Prompt（僅供 Debug 顯示）。
