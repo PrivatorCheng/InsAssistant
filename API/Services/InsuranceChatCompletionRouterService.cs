@@ -11,29 +11,29 @@ namespace API.Services;
 public sealed class InsuranceChatCompletionRouterService : IInsuranceChatCompletionService
 {
     private readonly IConfiguration _configuration;
-    private readonly GeminiQueryPlanningService _geminiQueryPlanningService;
-    private readonly GroqQueryPlanningService _groqQueryPlanningService;
-    private readonly GptQueryPlanningService _gptQueryPlanningService;
-    private readonly GithubQueryPlanningService _githubQueryPlanningService;
-    private readonly NimQueryPlanningService _nimQueryPlanningService;
-    private readonly MyLlamaQueryPlanningService _myLlamaQueryPlanningService;
+    private readonly GeminiChatCompletionService _geminiChatCompletionService;
+    private readonly GroqChatCompletionService _groqChatCompletionService;
+    private readonly GptChatCompletionService _gptChatCompletionService;
+    private readonly GithubChatCompletionService _githubChatCompletionService;
+    private readonly NimChatCompletionService _nimChatCompletionService;
+    private readonly MyLlamaChatCompletionService _myLlamaChatCompletionService;
 
     public InsuranceChatCompletionRouterService(
         IConfiguration configuration,
-        GeminiQueryPlanningService geminiQueryPlanningService,
-        GroqQueryPlanningService groqQueryPlanningService,
-        GptQueryPlanningService gptQueryPlanningService,
-        GithubQueryPlanningService githubQueryPlanningService,
-        NimQueryPlanningService nimQueryPlanningService,
-        MyLlamaQueryPlanningService myLlamaQueryPlanningService)
+        GeminiChatCompletionService geminiChatCompletionService,
+        GroqChatCompletionService groqChatCompletionService,
+        GptChatCompletionService gptChatCompletionService,
+        GithubChatCompletionService githubChatCompletionService,
+        NimChatCompletionService nimChatCompletionService,
+        MyLlamaChatCompletionService myLlamaChatCompletionService)
     {
         _configuration = configuration;
-        _geminiQueryPlanningService = geminiQueryPlanningService;
-        _groqQueryPlanningService = groqQueryPlanningService;
-        _gptQueryPlanningService = gptQueryPlanningService;
-        _githubQueryPlanningService = githubQueryPlanningService;
-        _nimQueryPlanningService = nimQueryPlanningService;
-        _myLlamaQueryPlanningService = myLlamaQueryPlanningService;
+        _geminiChatCompletionService = geminiChatCompletionService;
+        _groqChatCompletionService = groqChatCompletionService;
+        _gptChatCompletionService = gptChatCompletionService;
+        _githubChatCompletionService = githubChatCompletionService;
+        _nimChatCompletionService = nimChatCompletionService;
+        _myLlamaChatCompletionService = myLlamaChatCompletionService;
     }
 
     public Task<InsuranceChatCompletionResult> ExecuteAsync(
@@ -49,30 +49,30 @@ public sealed class InsuranceChatCompletionRouterService : IInsuranceChatComplet
 
         if (planner.Equals("Gpt", StringComparison.OrdinalIgnoreCase))
         {
-            return _gptQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
+            return _gptChatCompletionService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("Groq", StringComparison.OrdinalIgnoreCase))
         {
-            return _groqQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
+            return _groqChatCompletionService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("Github", StringComparison.OrdinalIgnoreCase))
         {
-            return _githubQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
+            return _githubChatCompletionService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("Nim", StringComparison.OrdinalIgnoreCase))
         {
-            return _nimQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
+            return _nimChatCompletionService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
         if (planner.Equals("MyLlama", StringComparison.OrdinalIgnoreCase))
         {
-            return _myLlamaQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
+            return _myLlamaChatCompletionService.ExecuteAsync(provider, prompt, cancellationToken);
         }
 
-        return _geminiQueryPlanningService.ExecuteAsync(provider, prompt, cancellationToken);
+        return _geminiChatCompletionService.ExecuteAsync(provider, prompt, cancellationToken);
     }
 
     public Task<InsuranceChatCompletionResult> ExecuteWithInlineImageAsync(
@@ -90,7 +90,7 @@ public sealed class InsuranceChatCompletionRouterService : IInsuranceChatComplet
 
         if (planner.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
         {
-            return _geminiQueryPlanningService.ExecuteWithInlineImageAsync(
+            return _geminiChatCompletionService.ExecuteWithInlineImageAsync(
                 provider,
                 prompt,
                 imageBytes,

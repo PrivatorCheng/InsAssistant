@@ -457,7 +457,8 @@ async function queryInsuranceChat(sessionId, userMessage, llmProvider, promptTem
         body: JSON.stringify(payload)
     });
     const data = await response.json();
-    if (!response.ok || !data || typeof data.reply !== "string") {
+    const hasReply = data && (typeof data.reply === "string" || typeof data.safeReplyHtml === "string" || typeof data.safe_reply_html === "string");
+    if (!response.ok || !hasReply) {
         const error = new Error((data === null || data === void 0 ? void 0 : data.msg) || "系統忙碌中，請稍後再試。");
         error.responseData = data || null;
         throw error;
@@ -564,7 +565,8 @@ async function analyzeImageByBase64(base64Data, mimeType, fileName, llmProvider,
     });
 
     const data = await response.json();
-    if (!response.ok || !data || typeof data.result !== "string") {
+    const hasResult = data && (typeof data.result === "string" || typeof data.safeResultHtml === "string" || typeof data.safe_result_html === "string");
+    if (!response.ok || !hasResult) {
         throw new Error((data === null || data === void 0 ? void 0 : data.msg) || "影像分析失敗");
     }
 
@@ -1458,13 +1460,71 @@ function appendResultMessage(report) {
     appendMessage(`<h2 class="message-title">回覆</h2>${tableHtml}`, "message-result", "left");
 }
 
+function normalizeEscapedLineBreaks(value) {
+    return (value || "")
+        .toString()
+        .replace(/\\r\\n/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\n");
+}
+
+function normalizeSafeReplyHtml(safeHtml, fallbackPlainText) {
+    const normalizedSafeHtml = (safeHtml || "").toString().trim();
+    if (normalizedSafeHtml) {
+        const containsUnsafeTag = /<(?!br\s*\/?>)/i.test(normalizedSafeHtml);
+        if (!containsUnsafeTag) {
+            return normalizedSafeHtml
+                .replace(/\\r\\n/g, "<br />")
+                .replace(/\\n/g, "<br />")
+                .replace(/\\r/g, "<br />")
+                .replace(/\r\n/g, "<br />")
+                .replace(/\n/g, "<br />")
+                .replace(/\r/g, "<br />");
+        }
+    }
+
+    const normalizedReply = normalizeEscapedLineBreaks(fallbackPlainText || "-");
+    return escapeHtml(normalizedReply).replaceAll("\n", "<br />");
+}
+
+function decodeHtmlEntities(value) {
+    const textArea = document.createElement("textarea");
+    textArea.innerHTML = (value || "").toString();
+    return textArea.value;
+}
+
+function resolveReplyDisplayText(reply, safeReplyHtml) {
+    const normalizedSafeHtml = (safeReplyHtml || "").toString().trim();
+    if (normalizedSafeHtml) {
+        const containsUnsafeTag = /<(?!br\s*\/?>)/i.test(normalizedSafeHtml);
+        if (!containsUnsafeTag) {
+            const withLineBreakText = normalizedSafeHtml.replace(/<br\s*\/?>/gi, "\n");
+            const decodedText = decodeHtmlEntities(withLineBreakText);
+            return normalizeEscapedLineBreaks(decodedText);
+        }
+    }
+
+    return normalizeEscapedLineBreaks((reply || "-").toString());
+}
+
 /**
  * 新增對話回覆結果訊息。
  * @param {string} reply AI 回覆內容
  */
-function appendChatReplyMessage(reply) {
-    const safeReply = escapeHtml((reply || "-").toString()).replaceAll("\n", "<br />");
-    appendMessage(`<h2 class="message-title">回覆</h2><p class="mb-0">${safeReply}</p>`, "message-result", "left");
+function appendChatReplyMessage(reply, safeReplyHtml) {
+    const displayText = resolveReplyDisplayText(reply, safeReplyHtml);
+    const article = appendMessage('<h2 class="message-title">回覆</h2><p class="mb-0 llm-reply-text"></p>', "message-result", "left");
+    if (!article) {
+        return;
+    }
+
+    const replyParagraph = article.querySelector(".llm-reply-text");
+    if (!(replyParagraph instanceof HTMLElement)) {
+        return;
+    }
+
+    replyParagraph.style.whiteSpace = "pre-wrap";
+    replyParagraph.textContent = displayText;
 }
 
 function setConversationHistoryPanelOpenState(isOpen) {
@@ -2838,7 +2898,8 @@ function initializePage() {
             const selectedProvider = getSelectedLlmProvider();
             const promptTemplateMode = getSelectedPromptTemplateMode();
             const response = await queryInsuranceChat(insuranceChatSessionId, query, selectedProvider, promptTemplateMode);
-            const reply = (response.reply || "").toString().trim();
+            const reply = normalizeEscapedLineBreaks((response.reply || "").toString().trim());
+            const safeReplyHtml = ((response.safeReplyHtml || response.safe_reply_html) || "").toString();
             appendSystemPromptDebug((response.systemPrompt || "").toString());
             appendStoryScriptDebug((response.storyScript || "").toString());
             appendLlmLogErrorsDebug(response.llmLogErrors || response.llm_log_errors || []);
@@ -2863,7 +2924,7 @@ function initializePage() {
                 : [];
             setSelectedModel(usedModel || usedProvider);
             setQuerySummary(reply);
-            appendChatReplyMessage(reply);
+            appendChatReplyMessage(reply, safeReplyHtml);
             try {
                 await playReplyVoice(reply);
             }

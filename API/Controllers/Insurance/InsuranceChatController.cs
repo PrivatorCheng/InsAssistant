@@ -154,6 +154,7 @@ public class InsuranceChatController : ControllerBase
             return Ok(new ImageUploadChatResponse
             {
                 Result = completion.Content,
+                SafeResultHtml = LlmOutputSanitizer.ToSafeHtml(completion.Content),
                 DocumentTitle = imageTitle,
                 LlmProvider = completion.Provider,
                 LlmModel = completion.Model
@@ -228,6 +229,7 @@ public class InsuranceChatController : ControllerBase
             return Ok(new ImageUploadChatResponse
             {
                 Result = ocrText,
+                SafeResultHtml = LlmOutputSanitizer.ToSafeHtml(ocrText),
                 DocumentTitle = documentTitle,
                 LlmProvider = "Tesseract",
                 LlmModel = "Tesseract-OCR"
@@ -250,6 +252,9 @@ public class InsuranceChatController : ControllerBase
     public async Task<SimpleChatResponse> Chat([FromBody] SimpleChatRequest request, CancellationToken cancellationToken)
     {
         var response = await _insuranceChatService.ChatAsync(request, cancellationToken);
+        response.SafeReplyHtml = LlmOutputSanitizer.ToSafeHtml(response.Reply);
+        response.SafeLlmRawReplyHtml = LlmOutputSanitizer.ToSafeHtml(response.LlmRawReply);
+
         if (IsConversationHistoryMode(request))
         {
             var historyFileName = TrySaveConversationHistory(
@@ -821,6 +826,11 @@ public class InsuranceChatController : ControllerBase
         /// LLM 回傳結果。
         /// </summary>
         public string Result { get; set; } = string.Empty;
+
+        /// <summary>
+        /// LLM 回傳結果（已做 HTML 編碼，供前端安全渲染）。
+        /// </summary>
+        public string SafeResultHtml { get; set; } = string.Empty;
 
         /// <summary>
         /// 影像辨識出的文件標題。
