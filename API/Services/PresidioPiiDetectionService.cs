@@ -18,6 +18,11 @@ public sealed class PresidioPiiDetectionService : IPiiDetectionService, IDisposa
 
     private const string SupportedLanguage = "zh";
     private const double DetectionScoreThreshold = 0.6;
+    private const string ChineseSurnamePattern = "(?:歐陽|司馬|上官|夏侯|諸葛|張簡|范姜|王|李|張|劉|陳|楊|黃|趙|周|吳|徐|孫|胡|朱|高|林|何|郭|馬|羅|梁|宋|鄭|謝|韓|唐|馮|于|董|蕭|程|曹|袁|鄧|許|傅|沈|曾|彭|蘇|盧|蔣|蔡|賈|丁|魏|薛|葉|閻|余|潘|杜|戴|夏|鍾|汪|田|任|姜|范|方|石|姚|譚|廖|鄒|熊|金|陸|白|崔|康|毛|邱|秦|江|史|顧|侯|邵|孟|龍|萬|段|雷|錢|湯|尹|黎|易|常|武|喬|賀|賴|龔|文)";
+
+    private static readonly Regex NameWithTitleRegex = new(
+        $@"(?<name>{ChineseSurnamePattern}[\p{{IsCJKUnifiedIdeographs}}]{{1,2}})(?<title>先生|小姐|太太|經理|主任|協理|襄理|總監|總經理|老師)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
     private static readonly string[] SupportedEntities =
     [
@@ -65,6 +70,64 @@ public sealed class PresidioPiiDetectionService : IPiiDetectionService, IDisposa
             .ToArray();
     }
 
+    /// <summary>
+    /// 將文字中的個資內容遮罩為不可識別字串。
+    /// </summary>
+    public string MaskPersonalData(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return text;
+        }
+
+        var results = _analyzerEngine.Analyze(
+            text,
+            SupportedLanguage,
+            entities: SupportedEntities,
+            scoreThreshold: DetectionScoreThreshold)
+            .Where(result => result.Start >= 0 && result.End > result.Start)
+            .OrderBy(result => result.Start)
+            .ThenByDescending(result => result.End)
+            .ToList();
+
+        if (results.Count == 0)
+        {
+            return ApplyFallbackMasking(text);
+        }
+
+        var chars = text.ToCharArray();
+        foreach (var result in results)
+        {
+            var start = Math.Clamp(result.Start, 0, chars.Length);
+            var end = Math.Clamp(result.End, 0, chars.Length);
+            for (var index = start; index < end; index++)
+            {
+                if (!char.IsWhiteSpace(chars[index]))
+                {
+                    chars[index] = '*';
+                }
+            }
+        }
+
+        var maskedText = new string(chars);
+        return ApplyFallbackMasking(maskedText);
+    }
+
+    private static string ApplyFallbackMasking(string text)
+    {
+        return NameWithTitleRegex.Replace(text, match =>
+        {
+            var name = match.Groups["name"].Value;
+            var title = match.Groups["title"].Value;
+            if (string.IsNullOrWhiteSpace(name) || name.All(ch => ch == '*'))
+            {
+                return match.Value;
+            }
+
+            return new string('*', name.Length) + title;
+        });
+    }
+
     public void Dispose()
     {
         _analyzerEngine.Dispose();
@@ -78,7 +141,7 @@ public sealed class PresidioPiiDetectionService : IPiiDetectionService, IDisposa
             [
                 new Pattern(
                     "tw_person_chinese_name",
-                    @"(?:我叫|我是|姓名(?:是)?|名字(?:是)?|聯絡人(?:是)?|客戶姓名(?:是)?|要保人(?:是)?|被保險人(?:是)?|申請人(?:是)?)\s*[:：]?\s*(?:歐陽|司馬|上官|夏侯|諸葛|張簡|范姜|王|李|張|劉|陳|楊|黃|趙|周|吳|徐|孫|胡|朱|高|林|何|郭|馬|羅|梁|宋|鄭|謝|韓|唐|馮|于|董|蕭|程|曹|袁|鄧|許|傅|沈|曾|彭|蘇|盧|蔣|蔡|賈|丁|魏|薛|葉|閻|余|潘|杜|戴|夏|鍾|汪|田|任|姜|范|方|石|姚|譚|廖|鄒|熊|金|陸|白|崔|康|毛|邱|秦|江|史|顧|侯|邵|孟|龍|萬|段|雷|錢|湯|尹|黎|易|常|武|喬|賀|賴|龔|文)[\p{IsCJKUnifiedIdeographs}]{1,2}",
+                    $@"(?:我叫|我是|姓名(?:是)?|名字(?:是)?|聯絡人(?:是)?|客戶姓名(?:是)?|要保人(?:是)?|被保險人(?:是)?|申請人(?:是)?)\s*[:：]?\s*{ChineseSurnamePattern}[\p{{IsCJKUnifiedIdeographs}}]{{1,2}}",
                     0.82),
                 new Pattern(
                     "tw_person_english_name",

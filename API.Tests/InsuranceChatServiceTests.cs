@@ -106,7 +106,7 @@ public class InsuranceChatServiceTests
     }
 
     [Fact]
-    public async Task ChatAsync_ShouldSendToLlmEvenWhenMessageContainsPersonalData_WhenPiiGateIsDisabled()
+    public async Task ChatAsync_ShouldMaskPiiInOutboundPrompt_ButKeepOriginalHistoryInput()
     {
         var sessionCache = new ConcurrentDictionary<string, List<string>>();
         var mockBrainService = new Mock<IInsuranceBrainService>();
@@ -114,11 +114,13 @@ public class InsuranceChatServiceTests
         var piiDetectionService = new PresidioPiiDetectionService();
         var mockEnvironment = new Mock<IWebHostEnvironment>();
         var mockLogger = new Mock<ILogger<InsuranceChatService>>();
+        var capturedPrompts = new List<LlmPromptEnvelope>();
 
         mockEnvironment.SetupGet(environment => environment.ContentRootPath).Returns(CreateTempPromptDirectory());
         mockBrainService.SetupGet(service => service.AllProductsJson).Returns("[]");
         mockCompletionService
             .Setup(service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()))
+            .Callback<string?, LlmPromptEnvelope, CancellationToken>((_, prompt, _) => capturedPrompts.Add(prompt))
             .ReturnsAsync(new InsuranceChatCompletionResult { Content = "PII 訊息照常處理" });
 
         var sut = CreateSut(
@@ -132,13 +134,22 @@ public class InsuranceChatServiceTests
         var response = await sut.ChatAsync(new SimpleChatRequest
         {
             SessionId = "S003",
-            UserMessage = "我的姓名是王小明，手機是 0912-345-678"
+            UserMessage = "我今天要去拜訪張三經理，他剛牽了一台全新的特斯拉 Model Y。"
         });
 
         Assert.Equal("PII 訊息照常處理", response.Reply);
         Assert.True(sessionCache.TryGetValue("S003", out var histories));
         Assert.NotNull(histories);
         Assert.Equal(2, histories!.Count);
+        Assert.Contains("張三經理", histories[0], StringComparison.Ordinal);
+
+        Assert.True(capturedPrompts.Count >= 1);
+        Assert.All(capturedPrompts, prompt =>
+        {
+            Assert.DoesNotContain("張三", prompt.UserText, StringComparison.Ordinal);
+            Assert.Contains("經理", prompt.UserText, StringComparison.Ordinal);
+        });
+
         mockBrainService.Verify(service => service.EnsureInitialized(), Times.Once);
         mockCompletionService.Verify(
             service => service.ExecuteAsync(It.IsAny<string?>(), It.IsAny<LlmPromptEnvelope>(), It.IsAny<CancellationToken>()),

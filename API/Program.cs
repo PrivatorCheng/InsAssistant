@@ -27,8 +27,11 @@ if (string.IsNullOrWhiteSpace(qdrantHost))
 }
 
 var qdrantGrpcPort = builder.Configuration.GetValue<int?>("Qdrant:GrpcPort") ?? 6334;
+var qdrantRestPort = builder.Configuration.GetValue<int?>("Qdrant:RestPort") ?? 6333;
 var qdrantHttps = builder.Configuration.GetValue<bool?>("Qdrant:Https") ?? true;
 var qdrantApiKey = builder.Configuration["Qdrant:ApiKey"]?.Trim();
+var qdrantAccessMode = builder.Configuration["Qdrant:AccessMode"]?.Trim();
+string normalizedQdrantAccessMode;
 
 if (!qdrantHttps)
 {
@@ -39,6 +42,13 @@ if (string.IsNullOrWhiteSpace(qdrantApiKey))
 {
     throw new InvalidOperationException("Qdrant:ApiKey 未設定，請於 .env/DBConnection.json 的 Qdrant 區塊提供 API Key。");
 }
+
+if (!string.Equals(qdrantAccessMode, "ReadOnly", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException("Qdrant:AccessMode 必須設定為 ReadOnly，且需使用唯讀 API Key。");
+}
+
+normalizedQdrantAccessMode = "ReadOnly";
 
 const string FrontendCorsPolicy = "FrontendCorsPolicy";
 
@@ -52,6 +62,15 @@ builder.Services.AddScoped<MyLlamaChatCompletionService>();
 builder.Services.AddSingleton<ConcurrentDictionary<string, List<string>>>();
 builder.Services.Configure<PiperLivePlayerSettings>(builder.Configuration.GetSection(PiperLivePlayerSettings.SectionName));
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton(new QdrantAccessModeVerificationOptions
+{
+    Host = qdrantHost,
+    RestPort = qdrantRestPort,
+    Https = qdrantHttps,
+    ApiKey = qdrantApiKey,
+    AccessMode = normalizedQdrantAccessMode
+});
+builder.Services.AddHostedService<QdrantAccessModeStartupVerifier>();
 builder.Services.AddQdrantVectorStore(
     host: qdrantHost,
     port: qdrantGrpcPort,

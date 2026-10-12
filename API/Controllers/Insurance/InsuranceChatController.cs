@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text;
@@ -114,7 +116,8 @@ public class InsuranceChatController : ControllerBase
         try
         {
             var requestTime = DateTime.Now;
-            var userMessage = BuildImageUploadUserMessage(mimeType, normalizedFileName);
+            var outboundImageBytes = BuildMetadataStrippedJpeg(imageBytes);
+            var userMessage = BuildImageUploadUserMessage();
             var prompt = new LlmPromptEnvelope
             {
                 SystemPrompt = _imagePromptTemplate,
@@ -123,7 +126,7 @@ public class InsuranceChatController : ControllerBase
             var completion = await _chatCompletionService.ExecuteWithInlineImageAsync(
                 request.LlmProvider,
                 prompt,
-                imageBytes,
+                outboundImageBytes,
                 ImageUploadLlmMimeType,
                 cancellationToken);
 
@@ -664,15 +667,50 @@ public class InsuranceChatController : ControllerBase
         return System.IO.File.ReadAllText(resolvedPath);
     }
 
-    private static string BuildImageUploadUserMessage(string mimeType, string fileName)
+    private static string BuildImageUploadUserMessage()
     {
         var builder = new StringBuilder();
         builder.AppendLine("請根據系統提示詞分析以下影像資料。");
-        builder.AppendLine($"- file_name: {fileName}");
-        builder.AppendLine($"- upload_mime_type: {(string.IsNullOrWhiteSpace(mimeType) ? "image/unknown" : mimeType)}");
         builder.AppendLine($"- llm_inline_mime_type: {ImageUploadLlmMimeType}");
         builder.AppendLine("- image_payload: (透過 inlineData 傳送)");
         return builder.ToString();
+    }
+
+    private static byte[] BuildMetadataStrippedJpeg(byte[] sourceImageBytes)
+    {
+        if (sourceImageBytes is null || sourceImageBytes.Length == 0)
+        {
+            throw new InvalidOperationException("影像資料為空，無法進行 metadata 剝除。");
+        }
+
+        try
+        {
+            using var inputStream = new MemoryStream(sourceImageBytes);
+            using var sourceImage = Image.FromStream(inputStream, useEmbeddedColorManagement: false, validateImageData: true);
+            using var canvas = new Bitmap(sourceImage.Width, sourceImage.Height, PixelFormat.Format24bppRgb);
+            using (var graphics = Graphics.FromImage(canvas))
+            {
+                graphics.DrawImage(sourceImage, 0, 0, sourceImage.Width, sourceImage.Height);
+            }
+
+            using var outputStream = new MemoryStream();
+            var encoder = ImageCodecInfo.GetImageEncoders()
+                .FirstOrDefault(item => string.Equals(item.MimeType, "image/jpeg", StringComparison.OrdinalIgnoreCase));
+
+            if (encoder is null)
+            {
+                throw new InvalidOperationException("找不到 JPEG 編碼器，無法進行影像重編碼。");
+            }
+
+            using var encoderParameters = new EncoderParameters(1);
+            encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (byte)92);
+            canvas.Save(outputStream, encoder, encoderParameters);
+            return outputStream.ToArray();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("影像 metadata 剝除失敗，已阻擋對外傳送。", ex);
+        }
     }
 
     private void SaveUploadedImageQuerySpecFile(string sessionId, string originalFileName, string title, byte[] fileBytes)
