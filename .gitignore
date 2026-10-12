@@ -36,4 +36,4 @@ API/*.log
 doc/
 query_history/
 query_spec/
-
+server-pids.txt
